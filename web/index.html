@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data: blob: https://github.com https://avatars.githubusercontent.com; connect-src 'self' https://api.github.com; style-src 'self'; script-src 'self'; base-uri 'none'; form-action 'none'">
+<title>PullCraft — every building is a pull request</title>
+<meta name="description" content="A shared voxel world where every build is a GitHub pull request, validated and merged by GitHub Actions.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' fill='%23f2b134'/%3E%3Crect y='8' width='16' height='8' fill='%236f4a2b'/%3E%3Crect width='16' height='4' y='6' fill='%235aa63a'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<canvas id="view" tabindex="0" aria-label="3D world"></canvas>
+
+<header class="topbar">
+  <div class="brand"><span class="logo" aria-hidden="true"></span><strong>PullCraft</strong><span id="stats" class="pill" hidden></span></div>
+  <nav class="tools" aria-label="Main">
+    <button id="btn-world" class="tab on">Explore</button>
+    <button id="btn-build" class="tab">Build</button>
+    <button id="btn-builders">Builders</button>
+    <button id="btn-recent">Recent</button>
+    <button id="btn-help" aria-label="Help">?</button>
+  </nav>
+</header>
+
+<div id="crosshair" hidden></div>
+<div id="hover" class="card hover" hidden></div>
+<div id="debug" class="debug" hidden></div>
+
+<div id="hotbar" class="hotbar" hidden></div>
+<div id="buildbar" class="buildbar" hidden>
+  <button id="btn-palette">Blocks (E)</button>
+  <button id="btn-undo" title="Ctrl+Z">Undo</button>
+  <button id="btn-redo" title="Ctrl+Y">Redo</button>
+  <span id="meter" class="meter"><i></i><b id="meter-text">0 blocks</b></span>
+  <button id="btn-submit" class="primary">Submit build…</button>
+</div>
+
+<section id="start" class="start">
+  <div class="start-card">
+    <h1 id="start-title">Every building is a pull request.</h1>
+    <p id="start-sub">Fly around the shared world. Build your own plot, open a pull request, and GitHub Actions adds it for everyone.</p>
+    <button id="btn-play" class="primary big">Click to fly</button>
+    <p class="keys"><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> move &nbsp; <kbd>Space</kbd> up &nbsp; <kbd>Shift</kbd> down &nbsp; <kbd>Q</kbd> boost &nbsp; <kbd>Esc</kbd> menu</p>
+    <p id="touch-note" class="muted" hidden>Touch screens aren’t supported yet. Open PullCraft on a computer to fly and build.</p>
+  </div>
+</section>
+
+<aside id="drawer" class="drawer" hidden>
+  <header><h2 id="drawer-title"></h2><button id="drawer-close" aria-label="Close">×</button></header>
+  <div id="drawer-body"></div>
+</aside>
+
+<div id="palette" class="modal" hidden>
+  <div class="modal-card">
+    <header><h2>Choose a block</h2><button id="palette-close" aria-label="Close">×</button></header>
+    <div id="palette-grid" class="palette-grid"></div>
+  </div>
+</div>
+
+<div id="toasts" class="toasts" aria-live="polite"></div>
+<div id="fatal" class="fatal" hidden></div>
+<script src="vendor/three.min.js"></script>
+<script type="module" src="js/app.js"></script>
+</body>
+</html>

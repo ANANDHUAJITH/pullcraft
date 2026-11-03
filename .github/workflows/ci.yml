@@ -1,0 +1,23 @@
+name: CI
+on:
+  pull_request:
+    paths-ignore: ['plots/**']
+  push:
+    branches: [main]
+    paths-ignore: ['plots/**']
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - uses: actions/setup-node@v4
+        with: { node-version: '22' }
+      - run: python -m unittest discover -s tests -v
+      - run: python scripts/build_world.py --out /tmp/site
+      - run: SITE=/tmp/site node --test tests/core.test.mjs
+      - run: for f in web/js/*.js; do node --check "$f"; done

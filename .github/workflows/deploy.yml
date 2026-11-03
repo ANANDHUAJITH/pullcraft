@@ -1,0 +1,53 @@
+name: Deploy world
+
+on:
+  push:
+    branches: [main]
+    paths: ['plots/**', 'web/**', 'data/**', 'config.json', 'scripts/**']
+  workflow_dispatch:
+  schedule:
+    - cron: '17 3 * * *'   # daily safety net
+
+# Merges made with GITHUB_TOKEN do not trigger push events, so validate-pr.yml
+# calls this workflow explicitly via workflow_dispatch.
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }            # full history: slot order and build history come from git
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - uses: actions/cache@v4              # repo-linked plots are SHA-pinned, so cached copies never go stale
+        with:
+          path: .cache
+          key: sources-${{ github.run_id }}
+          restore-keys: sources-
+      - uses: actions/configure-pages@v5
+      - name: Build world
+        env:
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          PULLCRAFT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: python scripts/build_world.py --out site
+      - uses: actions/upload-pages-artifact@v3
+        with: { path: site }
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.d.outputs.page_url }}
+    steps:
+      - id: d
+        uses: actions/deploy-pages@v4

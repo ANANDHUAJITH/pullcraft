@@ -1,0 +1,26 @@
+{
+  "name": "PullCraft",
+  "world": {
+    "seed": 1337,
+    "chunk": 16,
+    "height": 128,
+    "ground": 24,
+    "sea": 20,
+    "plot_size": 32,
+    "plot_height": 64,
+    "road": 4
+  },
+  "rules": {
+    "max_blocks": 30000,
+    "max_file_bytes": 700000,
+    "max_title_length": 48,
+    "max_description_length": 160,
+    "min_account_age_days": 1,
+    "auto_merge": true,
+    "min_free_plots": 8,
+    "min_city_ring": 2
+  },
+  "spawn": { "title": "Community Plaza" },
+  "history_limit": 40,
+  "recent_limit": 40
+}

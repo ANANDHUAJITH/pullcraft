@@ -1,0 +1,357 @@
+{
+ "version": 1,
+ "blocks": [
+  {
+   "id": "grass",
+   "name": "Grass",
+   "color": "#8b5a35",
+   "pattern": "grass",
+   "render": "opaque",
+   "placeable": true,
+   "top": "#6fae45",
+   "side": "#8b5a35",
+   "bottom": "#8b5a35"
+  },
+  {
+   "id": "dirt",
+   "name": "Dirt",
+   "color": "#8b5a35",
+   "pattern": "noise",
+   "render": "opaque",
+   "placeable": true
+  },
+  {
+   "id": "stone",
+   "name": "Stone",
+   "color": "#8a8d91",
+   "pattern": "noise",
+   "render": "opaque",
+   "placeable": true
+  },
+  {
+   "id": "cobblestone",
+   "name": "Cobblestone",
+   "color": "#7a7c80",
+   "pattern": "cobble",
+   "render": "opaque",
+   "placeable": true
+  },
+  {
+   "id": "stone_bricks",
+   "name": "Stone Bricks",
+   "color": "#8f9296",
+   "pattern": "bricks",
+   "render": "opaque",
+   "placeable": true
+  },
+  {
+   "id": "smooth_stone",
+   "name": "Smooth Stone",
+   "color": "#b4b7bb",
+   "pattern": "noise",
+   "render": "opaque",
+   "placeable": true
+  },
+  {
+   "id": "sand",
+   "name": "Sand",
+   "color": "#e2d29a",
+   "pattern": "noise",
+   "render": "opaque",
+   "placeable": true
+  },
+  {
+   "id": "sandstone",
+   "name": "Sandstone",
+   "color": "#dcc88a",
+   "pattern": "bricks",
+   "render": "opaque",
+   "placeable": true
+  },
+  {
+   "id": "gravel",
+   "name": "Gravel",
+   "color": "#8e8883",
+   "pattern": "cobble",
+   "render": "opaque",
+   "placeable": true
+  },
+  {
+   "id": "snow",
+   "name": "Snow",
+   "color": "#f1f6fa",
+   "pattern": "noise",
+   "render": "opaque",
+   "placeable": true
+  },
+  {
+   "id": "water",
+   "name": "Water",
+   "color": "#3a6fd8",
+   "pattern": "water",
+   "render": "blend",
+   "placeable": false
+  },
+  {
+   "id": "asphalt",
+   "name": "Asphalt",
+   "color": "#3c4047",
+   "pattern": "noise",
+   "render": "opaque",
+   "placeable": false
+  },
+  {
+   "id": "plot_marker",
+   "name": "Plot Marker",
+   "color": "#d9b04a",
+   "pattern": "noise",
+   "render": "opaque",
+   "placeable": false
+  },
+  {
+   "id": "oak_log",
+   "name": "Oak Log",
+   "color": "#7a5a34",
+   "pattern": "log",
+   "render": "opaque",
+   "placeable": true,
+   "top": "#b08d57",
+   "side": "#6b4f2c",
+   "bottom": "#b08d57"
+  },
+  {
+   "id": "oak_planks",
+   "name": "Oak Planks",
+   "color": "#b08d57",
+   "pattern": "planks",
+   "render": "opaque",
+   "placeable": true
+  },
+  {
+   "id": "spruce_planks",
+   "name": "Spruce Planks",
+   "color": "#7b5a38",
+   "pattern": "planks",
+   "render": "opaque",
+   "placeable": true
+  },
+  {
+   "id": "birch_planks",
+   "name": "Birch Planks",
+   "color": "#d4c28b",
+   "pattern": "planks",
+   "render": "opaque",
+   "placeable": true
+  },
+  {
+   "id": "dark_oak_planks",
+   "name": "Dark Oak Planks",
+   "color": "#4d3a20",
+   "pattern": "planks",
+   "render": "opaque",
+   "placeable": true
+  },
+  {
+   "id": "leaves",
+   "name": "Leaves",
+   "color": "#3f8a2f",
+   "pattern": "leaves",
+   "render": "cutout",
+   "placeable": true
+  },
+  {
+   "id": "bricks",
+   "name": "Bricks",
+   "color": "#a5503c",
+   "pattern": "bricks",
+   "render": "opaque",
+   "placeable": true
+  },
+  {
+   "id": "quartz",
+   "name": "Quartz",
+   "color": "#ece7de",
+   "pattern": "noise",
+   "render": "opaque",
+   "placeable": true
+  },
+  {
+   "id": "iron_block",
+   "name": "Iron Block",
+   "color": "#d3d6d9",
+   "pattern": "plate",
+   "render": "opaque",
+   "placeable": true
+  },
+  {
+   "id": "gold_block",
+   "name": "Gold Block",
+   "color": "#f2c744",
+   "pattern": "plate",
+   "render": "opaque",
+   "placeable": true
+  },
+  {
+   "id": "glass",
+   "name": "Glass",
+   "color": "#bfe3ee",
+   "pattern": "glass",
+   "render": "blend",
+   "placeable": true
+  },
+  {
+   "id": "tinted_glass",
+   "name": "Tinted Glass",
+   "color": "#3b4a63",
+   "pattern": "glass",
+   "render": "blend",
+   "placeable": true
+  },
+  {
+   "id": "glowstone",
+   "name": "Glowstone",
+   "color": "#f6d77a",
+   "pattern": "lamp",
+   "render": "opaque",
+   "placeable": true,
+   "emissive": true
+  },
+  {
+   "id": "sea_lantern",
+   "name": "Sea Lantern",
+   "color": "#bfeee6",
+   "pattern": "lamp",
+   "render": "opaque",
+   "placeable": true,
+   "emissive": true
+  },
+  {
+   "id": "white_concrete",
+   "name": "White Concrete",
+   "color": "#e9ecec",
+   "pattern": "concrete",
+   "render": "opaque",
+   "placeable": true
+  },
+  {
+   "id": "light_gray_concrete",
+   "name": "Light Gray Concrete",
+   "color": "#9d9d97",
+   "pattern": "concrete",
+   "render": "opaque",
+   "placeable": true
+  },
+  {
+   "id": "gray_concrete",
+   "name": "Gray Concrete",
+   "color": "#474f52",
+   "pattern": "concrete",
+   "render": "opaque",
+   "placeable": true
+  },
+  {
+   "id": "black_concrete",
+   "name": "Black Concrete",
+   "color": "#1d1d21",
+   "pattern": "concrete",
+   "render": "opaque",
+   "placeable": true
+  },
+  {
+   "id": "red_concrete",
+   "name": "Red Concrete",
+   "color": "#a83232",
+   "pattern": "concrete",
+   "render": "opaque",
+   "placeable": true
+  },
+  {
+   "id": "orange_concrete",
+   "name": "Orange Concrete",
+   "color": "#e07613",
+   "pattern": "concrete",
+   "render": "opaque",
+   "placeable": true
+  },
+  {
+   "id": "yellow_concrete",
+   "name": "Yellow Concrete",
+   "color": "#f0c11c",
+   "pattern": "concrete",
+   "render": "opaque",
+   "placeable": true
+  },
+  {
+   "id": "lime_concrete",
+   "name": "Lime Concrete",
+   "color": "#6fb81d",
+   "pattern": "concrete",
+   "render": "opaque",
+   "placeable": true
+  },
+  {
+   "id": "green_concrete",
+   "name": "Green Concrete",
+   "color": "#4c6b21",
+   "pattern": "concrete",
+   "render": "opaque",
+   "placeable": true
+  },
+  {
+   "id": "cyan_concrete",
+   "name": "Cyan Concrete",
+   "color": "#157788",
+   "pattern": "concrete",
+   "render": "opaque",
+   "placeable": true
+  },
+  {
+   "id": "light_blue_concrete",
+   "name": "Light Blue Concrete",
+   "color": "#2f9fd4",
+   "pattern": "concrete",
+   "render": "opaque",
+   "placeable": true
+  },
+  {
+   "id": "blue_concrete",
+   "name": "Blue Concrete",
+   "color": "#2c2f90",
+   "pattern": "concrete",
+   "render": "opaque",
+   "placeable": true
+  },
+  {
+   "id": "purple_concrete",
+   "name": "Purple Concrete",
+   "color": "#6a2c9e",
+   "pattern": "concrete",
+   "render": "opaque",
+   "placeable": true
+  },
+  {
+   "id": "magenta_concrete",
+   "name": "Magenta Concrete",
+   "color": "#b0399f",
+   "pattern": "concrete",
+   "render": "opaque",
+   "placeable": true
+  },
+  {
+   "id": "pink_concrete",
+   "name": "Pink Concrete",
+   "color": "#e48ab0",
+   "pattern": "concrete",
+   "render": "opaque",
+   "placeable": true
+  },
+  {
+   "id": "brown_concrete",
+   "name": "Brown Concrete",
+   "color": "#603c20",
+   "pattern": "concrete",
+   "render": "opaque",
+   "placeable": true
+  }
+ ]
+}

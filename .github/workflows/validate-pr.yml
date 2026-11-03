@@ -1,0 +1,42 @@
+name: Validate build
+
+# pull_request_target runs the TRUSTED workflow/code from the base branch with a write token.
+# Safety rule: never check out, install or execute anything from the pull request.
+# scripts/validate_pr.py only reads the PR's plot file as JSON data.
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: write        # squash-merge
+  pull-requests: write   # comment, label, merge
+  issues: write          # comments/labels
+  actions: write         # trigger the deploy workflow after merging
+
+concurrency:
+  group: validate-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4          # base branch only (default for pull_request_target)
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - name: Validate and merge
+        id: v
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+          LOGIN: ${{ github.event.pull_request.user.login }}
+          ASSOC: ${{ github.event.pull_request.author_association }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: python scripts/validate_pr.py --repo "$REPO" --pr "$PR" --login "$LOGIN" --association "$ASSOC" --head-sha "$HEAD_SHA"
+      - name: Deploy the updated world
+        if: steps.v.outputs.merged == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run deploy.yml --repo "${{ github.repository }}"
