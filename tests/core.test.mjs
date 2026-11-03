@@ -106,3 +106,30 @@ test('client decodes what the Python builder wrote', { skip: !process.env.SITE }
   assert.equal(store.all().length, n);
   assert.ok(n >= m.stats.blocks);
 });
+
+// ---------------------------------------------------------------- blueprint parity (JS compiler == Python compiler)
+import { compileBlueprint } from '../web/js/blueprint.js';
+import { execFileSync } from 'node:child_process';
+import path from 'node:path';
+
+let JSDOM = null;
+try { ({ JSDOM } = await import('jsdom')); globalThis.DOMParser = new JSDOM('').window.DOMParser; } catch { /* xml parity skipped */ }
+
+const placeableSet = new Set(reg.placeable.map((b) => b.id));
+const root = new URL('..', import.meta.url).pathname;
+const files = [...fs.readdirSync(root + 'examples').map((f) => 'examples/' + f), ...fs.readdirSync(root + 'tests/fixtures').map((f) => 'tests/fixtures/' + f)];
+for (const rel of files) {
+  const ext = path.extname(rel).slice(1);
+  test(`blueprint parity: ${rel}`, { skip: ext === 'xml' && !JSDOM }, () => {
+    const py = JSON.parse(execFileSync('python3', [root + 'scripts/blueprint.py', root + rel], { encoding: 'utf8', maxBuffer: 1 << 26 }));
+    const js = compileBlueprint(ext, fs.readFileSync(root + rel, 'utf8'), cfg, placeableSet);
+    assert.equal(js.errors.length > 0, py.errors.length > 0, `error state differs: js=${js.errors} py=${py.errors}`);
+    if (!py.errors.length) {
+      assert.equal(js.title, py.title);
+      assert.equal(js.description, py.description);
+      assert.deepEqual(js.blocks, py.blocks);
+      assert.ok(js.blocks.length > 0);
+    }
+    if (rel.startsWith('examples/')) assert.deepEqual(js.errors, []);
+  });
+}

@@ -46,7 +46,8 @@ def evaluate(
 ) -> Verdict:
     """Pure decision function: no network, no subprocess (except via injected callables)."""
     rules = cfg["rules"]
-    expected = f"plots/{login}.json"
+    mine = {f"plots/{login}.{e}": e for e in pc.PLOT_EXTS}
+    expected = f"plots/{login}.json|css|xml"
     others = [f for f in files if not f["filename"].startswith("plots/")]
     if others:
         return Verdict("manual", summary="This pull request changes files outside `plots/`, so a maintainer must review it.")
@@ -58,17 +59,36 @@ def evaluate(
     errors: list[str] = []
     if not pc.LOGIN_RE.match(login):
         errors.append("Unrecognised GitHub login.")
+    final = {n for n in existing_plots if n in mine}
     for f in files:
         name, status = f["filename"], f["status"]
-        if name != expected:
+        prev = f.get("previous_filename")
+        if name not in mine:
             errors.append(f"`{name}` is not yours. You may only change `{expected}`.")
-        elif status not in ("added", "modified", "changed"):
-            errors.append(f"Status `{status}` is not allowed for `{name}`. To clear your plot, commit an empty `blocks` list.")
+            continue
+        if status == "removed":
+            final.discard(name)
+        elif status == "renamed":
+            if prev not in mine:
+                errors.append(f"`{prev}` is not yours.")
+            final.discard(prev)
+            final.add(name)
+        elif status in ("added", "modified", "changed"):
+            final.add(name)
+        else:
+            errors.append(f"Status `{status}` is not allowed for `{name}`.")
     if errors:
         return Verdict("rejected", errors)
+    if len(final) != 1:
+        return Verdict("rejected", [
+            f"After this PR you must have exactly one plot file (`{expected}`); found {len(final)}. "
+            "To switch format, add the new file and delete the old one in the same PR. To clear your plot, commit an empty one."])
+    target = next(iter(final))
+    ext = mine[target]
 
     lower = login.lower()
-    clash = [p for p in existing_plots if p.lower() == lower and p != login]
+    clash = [p for p in existing_plots if p.startswith("plots/") and p.rsplit("/", 1)[1].rsplit(".", 1)[0].lower() == lower
+             and p not in mine]
     if clash:
         return Verdict("rejected", [f"A plot named `{clash[0]}` already exists (names are case-insensitive)."])
 
@@ -77,22 +97,22 @@ def evaluate(
         if account_created is None or (now - account_created).days < rules["min_account_age_days"]:
             return Verdict("rejected", [f"Your GitHub account must be at least {rules['min_account_age_days']} day(s) old to submit builds."])
 
-    raw = read_head(expected)
+    raw = read_head(target)
     if raw is None:
-        return Verdict("rejected", [f"Could not read `{expected}` from the pull request."])
+        return Verdict("rejected", [f"Could not read `{target}` from the pull request."])
     if len(raw) > rules["max_file_bytes"]:
-        return Verdict("rejected", [f"`{expected}` is {len(raw)//1024} KB; the limit is {rules['max_file_bytes']//1024} KB."])
-    try:
-        doc = json.loads(raw.decode("utf-8"))
-    except (UnicodeDecodeError, ValueError) as exc:
-        return Verdict("rejected", [f"`{expected}` is not valid JSON: {str(exc)[:100]}"])
+        return Verdict("rejected", [f"`{target}` is {len(raw)//1024} KB; the limit is {rules['max_file_bytes']//1024} KB."])
+    doc, problem = pc.doc_from_file(ext, raw)
+    if problem:
+        return Verdict("rejected", [f"`{target}`: {problem}"])
 
     errs, stats, _ = pc.validate_document(doc, login, cfg, placeable, fetch)
     if errs:
         return Verdict("rejected", errs)
     where = "your own repository (pinned commit)" if stats.kind == "repo" else "this pull request"
+    how = {"blocks": "block-by-block", "css": "CSS blueprint", "xml": "XML blueprint"}[stats.format]
     title = stats.title or "Untitled"
-    return Verdict("approved", summary=f"**{title}** — {stats.blocks:,} blocks, stored in {where}.")
+    return Verdict("approved", summary=f"**{title}** — {stats.blocks:,} blocks ({how}), stored in {where}.")
 
 
 # --------------------------------------------------------------------------- I/O glue
@@ -111,7 +131,7 @@ def list_files(repo: str, pr: int) -> list[dict]:
     files: list[dict] = []
     for page in range(1, 31):
         batch = gh_json(f"repos/{repo}/pulls/{pr}/files?per_page=100&page={page}")
-        files += [{"filename": f["filename"], "status": f["status"]} for f in batch]
+        files += [{"filename": f["filename"], "status": f["status"], "previous_filename": f.get("previous_filename")} for f in batch]
         if len(batch) < 100:
             break
     return files
@@ -172,7 +192,7 @@ def main() -> int:
         res = subprocess.run(["git", "show", f"FETCH_HEAD:{path}"], capture_output=True)
         return res.stdout if res.returncode == 0 else None
 
-    existing = {p.stem for p in Path("plots").glob("*.json")}
+    existing = {f"plots/{p.name}" for p in Path("plots").iterdir() if p.suffix[1:] in pc.PLOT_EXTS}
     created = None
     if a.association not in TRUSTED:
         user = gh_json(f"users/{a.login}")

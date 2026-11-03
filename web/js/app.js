@@ -2,6 +2,7 @@
 import { Registry, Terrain, Layout, BlockStore, raycast, validatePlot } from './core.js';
 import { paintAtlas, blockIcon, createStage, VoxelWorld, FlyControls, makeHighlight, makeLabel } from './engine.js';
 import { submitPlot, uploadPageUrl } from './github.js';
+import { compileBlueprint, AI_PROMPT } from './blueprint.js';
 
 const THREE = window.THREE;
 const $ = (s) => document.querySelector(s);
@@ -160,6 +161,8 @@ let hotbar = store_ls.get('hotbar', HOTBAR_DEFAULT);
 if (!Array.isArray(hotbar) || hotbar.length !== 9) hotbar = [...HOTBAR_DEFAULT];
 let sel = 0, meta = store_ls.get('meta', { title: '', description: '', username: '' });
 let undo = [], redo = [], batch = [], saveTimer = 0, blockCount = 0;
+let code = null; // { format, source } while the plot is exactly what a blueprint compiled to
+const EXAMPLES = [['Hilltop Castle (CSS)', 'examples/castle.css'], ['Tiny Cottage (CSS)', 'examples/cottage.css'], ['Glass Needle (XML)', 'examples/needle.xml'], ['Five-Tier Pagoda (XML)', 'examples/pagoda.xml']];
 const icons = new Map();
 const iconFor = (name) => { if (!icons.has(name)) icons.set(name, blockIcon(atlasInfo.canvas, atlasInfo.atlas, reg.id(name), 48)); const c = icons.get(name); const copy = document.createElement('canvas'); copy.width = copy.height = 48; copy.getContext('2d').drawImage(c, 0, 0); return copy; };
 
@@ -194,11 +197,12 @@ function updateMeter() {
 }
 function scheduleSave() {
   clearTimeout(saveTimer);
-  saveTimer = setTimeout(() => { if (current?.name === 'build') store_ls.set('draft', { ...exportDoc(), username: meta.username }); }, 700);
+  saveTimer = setTimeout(() => { if (current?.name === 'build') store_ls.set('draft', { ...exportDoc(), username: meta.username, code }); }, 700);
 }
 function edit(x, y, z, id) {
   const st = current.store, old = st.get(x, y, z);
   if (old === id) return false;
+  code = null; // hand edits make the plot differ from its blueprint
   st.set(x, y, z, id); current.vw.setBlock(x, y, z, id);
   blockCount += (id ? 1 : 0) - (old ? 1 : 0);
   batch.push([x, y, z, old, id]);
@@ -209,6 +213,7 @@ function commitBatch() { if (batch.length) { undo.push(batch); redo = []; batch 
 function applyHistory(from, to, idx) {
   const b = from.pop();
   if (!b) return;
+  code = null;
   for (const op of (idx === 3 ? [...b].reverse() : b)) {
     const [x, y, z] = op, id = op[idx], st = current.store, old = st.get(x, y, z);
     st.set(x, y, z, id); current.vw.setBlock(x, y, z, id);
@@ -256,7 +261,7 @@ async function enterBuild(remixUser) {
   const draft = store_ls.get('draft', null);
   try {
     if (remixUser) { await loadPublished(remixUser); toast(`Loaded ${remixUser}’s plot as a starting point.`); }
-    else if (draft?.blocks) { meta.title = draft.title || ''; meta.description = draft.description || ''; docToStore(draft); if (draft.blocks.length) toast('Restored your unsaved draft.'); }
+    else if (draft?.blocks) { meta.title = draft.title || ''; meta.description = draft.description || ''; docToStore(draft); code = draft.code || null; if (draft.blocks.length) toast('Restored your unsaved draft.'); }
     else if (meta.username && plotByUser.has(meta.username.toLowerCase())) await loadPublished(meta.username);
   } catch { toast('Could not load that plot.', true); }
   updateMeter();
@@ -264,7 +269,7 @@ async function enterBuild(remixUser) {
 async function loadPublished(user) {
   const doc = await getJSON(`world/plots/${encodeURIComponent(user)}.json`, true);
   meta.title = doc.title || ''; meta.description = doc.description || '';
-  docToStore(doc); undo = []; redo = []; scheduleSave();
+  docToStore(doc); undo = []; redo = []; code = null; scheduleSave();
 }
 
 // ------------------------------------------------------------------ world interactions
@@ -325,17 +330,18 @@ function openBuilders() {
   const list = h('ul', { class: 'list' });
   const search = h('input', { type: 'search', placeholder: 'Search builders…', 'aria-label': 'Search builders' });
   const sort = h('select', { 'aria-label': 'Sort' }, h('option', { value: 'new', text: 'Newest' }), h('option', { value: 'size', text: 'Most blocks' }), h('option', { value: 'name', text: 'Name' }));
+  const kind = h('select', { 'aria-label': 'Filter' }, h('option', { value: '', text: 'All builds' }), h('option', { value: 'blocks', text: 'Blocks' }), h('option', { value: 'css', text: 'CSS' }), h('option', { value: 'xml', text: 'XML' }));
   const render = () => {
     const q = search.value.trim().toLowerCase();
-    const items = M.plots.filter((p) => !q || p.user.toLowerCase().includes(q) || (p.title || '').toLowerCase().includes(q));
+    const items = M.plots.filter((p) => (!q || p.user.toLowerCase().includes(q) || (p.title || '').toLowerCase().includes(q)) && (!kind.value || (p.format || 'blocks') === kind.value));
     items.sort(sort.value === 'size' ? (a, b) => b.blocks - a.blocks : sort.value === 'name' ? (a, b) => a.user.localeCompare(b.user) : (a, b) => (b.updated || 0) - (a.updated || 0));
     list.replaceChildren(...items.slice(0, 200).map((p) => h('li', {}, h('button', { class: 'row', onclick: () => flyToPlot(p) }, avatar(p.user),
-      h('span', { class: 't' }, h('b', { text: p.title || p.user }), h('small', { text: `${p.user} · ${p.blocks.toLocaleString()} blocks · ${ago(p.updated)}` }))))));
+      h('span', { class: 't' }, h('b', { text: p.title || p.user }), h('small', { text: `${p.user} · ${p.blocks.toLocaleString()} blocks${p.format && p.format !== 'blocks' ? ' · ' + p.format.toUpperCase() : ''} · ${ago(p.updated)}` }))))));
     if (!items.length) list.replaceChildren(h('li', { class: 'muted', text: M.plots.length ? 'No builders match.' : 'No builders yet. Be the first!' }));
   };
-  search.addEventListener('input', render); sort.addEventListener('change', render);
+  search.addEventListener('input', render); sort.addEventListener('change', render); kind.addEventListener('change', render);
   render();
-  openDrawer(`Builders (${M.plots.length})`, search, sort, list);
+  openDrawer(`Builders (${M.plots.length})`, search, h('div', { class: 'row-actions' }, sort, kind), list);
 }
 async function openRecent() {
   const list = h('ul', { class: 'list' }, h('li', { class: 'muted', text: 'Loading…' }));
@@ -361,6 +367,8 @@ async function openProfile(user) {
     d.description ? h('p', { text: d.description }) : null,
     h('dl', { class: 'kv' }, h('dt', { text: 'Blocks' }), h('dd', { text: d.blocks.toLocaleString() }), h('dt', { text: 'Plot' }), h('dd', { text: `cell ${d.cell[0]}, ${d.cell[1]}` }),
       h('dt', { text: 'Stored in' }), h('dd', { text: d.source === 'repo' ? 'their own repository (pinned)' : 'this repository' }), h('dt', { text: 'Last change' }), h('dd', { text: ago(d.updated) })),
+    d.format && d.format !== 'blocks' ? h('p', {}, h('span', { class: 'badge', text: `BUILT WITH ${d.format.toUpperCase()}` })) : null,
+    d.format && d.format !== 'blocks' ? sourceViewer(user) : null,
     h('div', { class: 'stack' },
       h('button', { class: 'primary', onclick: () => flyToPlot(plotByUser.get(user.toLowerCase()), false) }, 'Fly to plot'),
       h('button', { onclick: () => { closeDrawer(); enterBuild(user); } }, 'Remix in the editor'),
@@ -371,6 +379,21 @@ async function openProfile(user) {
         M.repo ? h('a', { href: `${repoUrl}/commit/${e.sha}`, target: '_blank', rel: 'noopener', text: e.sha.slice(0, 7) }) : null,
         e.pr && M.repo ? [' · ', h('a', { href: `${repoUrl}/pull/${e.pr}`, target: '_blank', rel: 'noopener', text: `PR #${e.pr}` })] : null)))) : h('p', { class: 'muted', text: 'No history recorded.' }),
   );
+}
+function sourceViewer(user) {
+  const box = h('div', {});
+  const btn = h('button', { onclick: async () => {
+    if (box.firstChild) { box.replaceChildren(); btn.textContent = 'View source'; return; }
+    try { const doc = await getJSON(`world/plots/${encodeURIComponent(user)}.json`, true); box.replaceChildren(h('pre', { class: 'src', text: doc.source || '' })); btn.textContent = 'Hide source'; }
+    catch { toast('Could not load the source.', true); }
+  } }, 'View source');
+  const remix = h('button', { onclick: async () => {
+    try {
+      const doc = await getJSON(`world/plots/${encodeURIComponent(user)}.json`, true);
+      closeDrawer(); await enterBuild(user); code = { format: doc.format, source: doc.source }; openCode({ format: doc.format, source: doc.source });
+    } catch { toast('Could not open the source.', true); }
+  } }, 'Edit in the code editor');
+  return h('div', {}, h('div', { class: 'row-actions' }, btn, remix), box);
 }
 function openHelp() {
   const view = h('input', { type: 'range', min: 3, max: 12, value: store_ls.get('view', 7), 'aria-label': 'View distance' });
@@ -412,7 +435,7 @@ function openSubmit() {
     if (!M.repo) return showErr(['This build has no repository configured.']);
     create.disabled = true;
     try {
-      const r = await submitPlot({ token: token.value.trim(), upstream: M.repo, branch: M.branch, doc: d, ownRepo: own.checked, log: (m) => { status.textContent = m; } });
+      const r = await submitPlot({ token: token.value.trim(), upstream: M.repo, branch: M.branch, doc: d, code, ownRepo: own.checked, log: (m) => { status.textContent = m; } });
       token.value = ''; meta.username = r.login; store_ls.set('meta', meta);
       out.replaceChildren(h('div', { class: 'okbox' }, h('b', { text: 'Pull request opened.' }), h('br'), h('a', { href: r.url, target: '_blank', rel: 'noopener', text: r.url }), h('p', { class: 'hint', text: 'GitHub Actions checks it within a minute. If it passes it merges automatically and your build goes live after the next deploy.' })));
       status.textContent = '';
@@ -423,7 +446,7 @@ function openSubmit() {
   const download = h('button', { onclick: () => {
     const d = fileDoc(), errs = validatePlot(d, W, rules, new Set(reg.placeable.map((b) => b.id)));
     if (errs.length) return showErr(errs);
-    const a = h('a', { href: URL.createObjectURL(new Blob([JSON.stringify(d)], { type: 'application/json' })), download: `${user.value.trim() || 'your-github-username'}.json` });
+    const a = h('a', { href: URL.createObjectURL(new Blob([code ? code.source : JSON.stringify(d)], { type: 'text/plain' })), download: `${user.value.trim() || 'your-github-username'}.${code ? code.format : 'json'}` });
     a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
   } }, 'Download plot file');
   const fileIn = h('input', { type: 'file', accept: 'application/json,.json', hidden: true });
@@ -432,12 +455,13 @@ function openSubmit() {
       const d = JSON.parse(await fileIn.files[0].text());
       const errs = validatePlot(d, W, rules, new Set(reg.placeable.map((b) => b.id)));
       if (errs.length) return showErr(errs);
-      meta.title = d.title || ''; meta.description = d.description || ''; docToStore(d); undo = []; redo = []; scheduleSave(); closeDrawer(); toast('Plot loaded.');
+      meta.title = d.title || ''; meta.description = d.description || ''; docToStore(d); undo = []; redo = []; code = null; scheduleSave(); closeDrawer(); toast('Plot loaded.');
     } catch { showErr(['That file isn’t a valid plot.']); }
   });
 
   openDrawer('Submit your build',
     errors.length ? h('ul', { class: 'errors' }, errors.map((m) => h('li', { text: m }))) : h('p', { class: 'hint', text: `${doc.blocks.length.toLocaleString()} blocks ready.` }),
+    code ? h('div', { class: 'okbox' }, h('b', { text: `Submitting your ${code.format.toUpperCase()} blueprint` }), h('br'), h('span', { class: 'hint', text: `${code.source.length.toLocaleString()} characters of source. Visitors can read it and remix it from your plot.` })) : null,
     h('label', { text: 'Title' }), title, h('label', { text: 'Description' }), desc,
     h('label', { text: 'GitHub username' }), user,
     h('label', { text: 'GitHub token' }), token,
@@ -445,13 +469,51 @@ function openSubmit() {
     h('label', { class: 'check' }, own, h('span', { text: 'Keep my build in my own repository (pullcraft-builds). The world pins it to this exact commit.' })),
     h('div', { class: 'stack' }, create, status),
     h('h3', { text: 'No token?' }),
-    h('p', { class: 'hint', text: 'Download the file, then upload it as plots/<your-username>.json on GitHub. GitHub offers to fork and open the pull request for you.' }),
+    h('p', { class: 'hint', text: `Download the file, then upload it as plots/<your-username>.${code ? code.format : 'json'} on GitHub. GitHub offers to fork and open the pull request for you.` }),
     h('div', { class: 'stack' }, download, M.repo ? h('a', { href: uploadPageUrl(M.repo, M.branch), target: '_blank', rel: 'noopener', text: 'Open the GitHub upload page' }) : null),
     out,
     h('h3', { text: 'Tools' }),
     h('div', { class: 'stack' }, h('button', { onclick: () => fileIn.click() }, 'Load a plot file…'),
-      h('button', { onclick: () => { if (confirm('Remove every block from your plot?')) { batch = current.store.all().map(([x, y, z, id]) => [x, y, z, id, 0]); for (const [x, y, z] of batch) current.vw.setBlock(x, y, z, 0); blockCount = 0; commitBatch(); updateMeter(); scheduleSave(); closeDrawer(); } } }, 'Clear my plot'),
+      h('button', { onclick: () => { if (confirm('Remove every block from your plot?')) { batch = current.store.all().map(([x, y, z, id]) => [x, y, z, id, 0]); for (const [x, y, z] of batch) current.vw.setBlock(x, y, z, 0); blockCount = 0; code = null; commitBatch(); updateMeter(); scheduleSave(); closeDrawer(); } } }, 'Clear my plot'),
       fileIn));
+}
+
+// ------------------------------------------------------------------ code (CSS / XML blueprints)
+function stripFences(t) { return t.split('\n').filter((l) => !l.trim().startsWith('```')).join('\n').trim(); }
+function openCode(initial) {
+  const saved = initial || store_ls.get('codetext', { format: 'css', source: '' });
+  const fmt = h('select', { 'aria-label': 'Format' }, h('option', { value: 'css', text: 'CSS-style' }), h('option', { value: 'xml', text: 'XML' }));
+  fmt.value = saved.format;
+  const ta = h('textarea', { class: 'code', spellcheck: 'false', 'aria-label': 'Blueprint source', placeholder: 'Pick an example, write your own, or paste what an AI wrote.' });
+  ta.value = saved.source;
+  const out = h('div', {});
+  const ex = h('select', { 'aria-label': 'Examples' }, h('option', { value: '', text: 'Load an example…' }), EXAMPLES.map(([n, f]) => h('option', { value: f, text: n })));
+  ex.addEventListener('change', async () => {
+    if (!ex.value) return;
+    try { ta.value = await (await fetch(ex.value)).text(); fmt.value = ex.value.split('.').pop(); out.replaceChildren(); } catch { toast('Could not load the example.', true); }
+  });
+  const preview = h('button', { class: 'primary', onclick: () => {
+    const source = stripFences(ta.value);
+    const format = source.startsWith('<') ? 'xml' : source.includes('{') ? 'css' : fmt.value;
+    fmt.value = format;
+    const res = compileBlueprint(format, source, { world: W, rules }, new Set(reg.placeable.map((b) => b.id)));
+    store_ls.set('codetext', { format, source });
+    if (res.errors.length) { out.replaceChildren(h('ul', { class: 'errors' }, res.errors.map((m) => h('li', { text: m })))); return; }
+    meta.title = res.title || meta.title; meta.description = res.description || meta.description;
+    docToStore({ blocks: res.blocks }); undo = []; redo = []; batch = [];
+    code = { format, source }; scheduleSave();
+    out.replaceChildren(h('div', { class: 'okbox' }, `Built ${res.blocks.length.toLocaleString()} blocks. Close this panel and fly around your plot, or edit and press Preview again.`));
+  } }, 'Preview in my plot');
+  const prompt = h('button', { onclick: async () => {
+    const text = AI_PROMPT(W, reg.placeable.map((b) => b.id));
+    try { await navigator.clipboard.writeText(text); toast('AI prompt copied. Paste it into any chat AI, add your idea, then paste the reply here.', false, 7000); }
+    catch { ta.value = text; toast('Copy the prompt from the box.', false, 5000); }
+  } }, 'Copy AI prompt');
+  openDrawer('Build with code',
+    h('p', { class: 'hint', text: 'Describe a building as shapes in CSS-style or XML. The same file is what you submit, so visitors can read and remix it.' }),
+    h('div', { class: 'row-actions' }, fmt, ex), ta,
+    h('div', { class: 'row-actions' }, preview, prompt), out,
+    h('p', { class: 'hint' }, 'Shapes: box, shell, walls, pyramid, cylinder, sphere, dome. Properties: x y z, width height depth, block, repeat-x/y/z, gap-x/y/z. ', M.repo ? h('a', { href: `https://github.com/${M.repo}/blob/${M.branch}/docs/BLUEPRINTS.md`, target: '_blank', rel: 'noopener', text: 'Full reference' }) : null));
 }
 
 // ------------------------------------------------------------------ palette
@@ -513,6 +575,7 @@ function wireUI() {
   $('#drawer-close').onclick = closeDrawer;
   $('#palette-close').onclick = closePalette;
   $('#btn-palette').onclick = openPalette;
+  $('#btn-code').onclick = () => openCode();
   $('#btn-undo').onclick = doUndo; $('#btn-redo').onclick = doRedo;
   $('#btn-submit').onclick = openSubmit;
   canvas.addEventListener('contextmenu', (e) => e.preventDefault());
@@ -534,7 +597,7 @@ function wireUI() {
     if (/^Digit[1-9]$/.test(e.code)) selectSlot(+e.code.slice(5) - 1);
     if (e.code === 'KeyE') { $('#palette').hidden ? openPalette() : closePalette(); }
   });
-  window.addEventListener('beforeunload', () => { if (current?.name === 'build') store_ls.set('draft', { ...exportDoc(), username: meta.username }); });
+  window.addEventListener('beforeunload', () => { if (current?.name === 'build') store_ls.set('draft', { ...exportDoc(), username: meta.username, code }); });
 }
 
 // ------------------------------------------------------------------ main loop

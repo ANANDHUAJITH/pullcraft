@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Show your build or ask a question
+    url: https://github.com/ANANDHUAJITH/pullcraft/discussions
+    about: Share what you made, get blueprint help, or pitch an idea.

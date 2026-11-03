@@ -1,0 +1,10 @@
+:root { --title: Tiny Cottage; --description: A cosy cottage in 12 lines of CSS.; --plank: oak_planks; }
+.floor   { shape: box;     x: 8;  y: 0; z: 8;  width: 16; height: 1; depth: 14; block: cobblestone; }
+.walls   { shape: walls;   x: 9;  y: 1; z: 9;  width: 14; height: 4; depth: 12; block: var(--plank); }
+.corners { shape: box;     x: 9;  y: 1; z: 9;  width: 1;  height: 4; depth: 1;  block: oak_log; repeat-x: 2; gap-x: 12; repeat-z: 2; gap-z: 10; }
+.door    { shape: box;     x: 15; y: 1; z: 9;  width: 2;  height: 3; depth: 1;  block: air; }
+.windows { shape: box;     x: 11; y: 2; z: 9;  width: 2;  height: 2; depth: 1;  block: glass; repeat-x: 2; gap-x: 6; }
+.roof    { shape: pyramid; x: 8;  y: 5; z: 8;  width: 16; height: 6; depth: 14; block: bricks; }
+.chimney { shape: box;     x: 20; y: 5; z: 10; width: 2;  height: 7; depth: 2;  block: cobblestone; }
+.garden  { shape: box;     x: 4;  y: 0; z: 24; width: 24; height: 1; depth: 1;  block: leaves; }
+.lamp    { shape: box;     x: 15; y: 1; z: 7;  width: 1;  height: 1; depth: 1;  block: glowstone; }

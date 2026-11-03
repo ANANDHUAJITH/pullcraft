@@ -1,0 +1,1 @@
+<plot title="Mix"><let name="m" value="brick"/><let name="n" value="bricks"/><group x="3" y="1" z="3"><group x="1"><box w="4" h="3" d="4" block="$n"/></group><cylinder x="8" w="5" h="6" d="5" block="oak_log"/></group></plot>

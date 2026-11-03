@@ -13,12 +13,15 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable, Optional
 
+import blueprint
+
 ROOT = Path(__file__).resolve().parent.parent
 
 LOGIN_RE = re.compile(r"^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$")
 SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 REPO_RE = re.compile(r"^[A-Za-z0-9-]{1,39}/[A-Za-z0-9._-]{1,100}$")
-SOURCE_PATH_RE = re.compile(r"^[A-Za-z0-9._/-]{1,120}\.json$")
+SOURCE_PATH_RE = re.compile(r"^[A-Za-z0-9._/-]{1,120}\.(json|css|xml)$")
+PLOT_EXTS = ("json", "css", "xml")
 TEXT_RE = re.compile(r"^[\w .,'!&()\-:+#/?]*$")
 MAX_ERRORS = 20
 
@@ -82,6 +85,7 @@ class PlotStats:
     title: str = ""
     description: str = ""
     kind: str = "inline"  # inline | repo
+    format: str = "blocks"  # blocks | css | xml
 
 
 def _is_int(v) -> bool:
@@ -147,6 +151,29 @@ def validate_document(
 
     Returns (errors, stats, resolved_inline_document).
     """
+    if isinstance(doc, dict) and "format" in doc:
+        extra = set(doc) - {"version", "format", "source", "title", "description"}
+        errs = []
+        if extra:
+            errs.append(f"Unknown keys: {', '.join(sorted(map(str, extra)))}.")
+        if doc.get("version") != 1:
+            errs.append('"version" must be 1.')
+        if not isinstance(doc.get("source"), str):
+            errs.append('"source" must be the blueprint text.')
+        if errs:
+            return errs, PlotStats(), None
+        errors, meta, blocks = blueprint.compile_blueprint(doc["format"], doc["source"], cfg, placeable)
+        stats = PlotStats(blocks=len(blocks), format=doc["format"])
+        if errors:
+            return errors, stats, None
+        for key, limit in (("title", cfg["rules"]["max_title_length"]), ("description", cfg["rules"]["max_description_length"])):
+            val = doc.get(key) if isinstance(doc.get(key), str) and doc.get(key).strip() else meta.get(key, "")
+            if len(val) > limit or not TEXT_RE.match(val):
+                return [f'"{key}" must be plain text up to {limit} characters.'], stats, None
+            setattr(stats, key, val.strip())
+        resolved = {"version": 1, "title": stats.title, "description": stats.description, "blocks": blocks,
+                    "format": doc["format"], "source": doc["source"]}
+        return [], stats, resolved
     if isinstance(doc, dict) and "source" in doc:
         extra = set(doc) - {"version", "title", "description", "source"}
         src = doc.get("source")
@@ -175,7 +202,9 @@ def validate_document(
             remote = fetch(repo, sha, path)
         except Exception as exc:  # network, size, JSON problems
             return [f"Could not fetch {repo}@{sha[:7]}:{path}: {str(exc)[:120]}"], PlotStats(kind="repo"), None
-        errors, stats = validate_content(remote, cfg, placeable)
+        if isinstance(remote, str):  # .css / .xml file
+            remote = {"version": 1, "format": path.rsplit(".", 1)[1], "source": remote}
+        errors, stats, resolved_remote = validate_document(remote, owner, cfg, placeable, None)
         stats.kind = "repo"
         if not errors:
             for key in ("title", "description"):  # pointer may override display text
@@ -183,7 +212,7 @@ def validate_document(
                     if len(doc[key]) <= cfg["rules"]["max_title_length" if key == "title" else "max_description_length"] \
                             and TEXT_RE.match(doc[key]):
                         setattr(stats, key, doc[key].strip())
-        return errors, stats, (remote if not errors else None)
+        return errors, stats, (resolved_remote if not errors else None)
     errors, stats = validate_content(doc, cfg, placeable)
     return errors, stats, (doc if not errors else None)  # type: ignore[return-value]
 
@@ -197,16 +226,30 @@ def github_raw_fetch(max_bytes: int, cache_dir: Optional[Path] = None) -> Callab
             key = hashlib.sha1(f"{repo}/{sha}/{path}".encode()).hexdigest()
             cache_file = cache_dir / f"{key}.json"
             if cache_file.exists():
-                return json.loads(cache_file.read_text(encoding="utf-8"))
+                return json.loads(cache_file.read_text(encoding="utf-8"))["v"]
         url = f"https://raw.githubusercontent.com/{repo}/{sha}/{path}"
         req = urllib.request.Request(url, headers={"User-Agent": "pullcraft-builder"})
         with urllib.request.urlopen(req, timeout=20) as resp:
             raw = resp.read(max_bytes + 1)
         if len(raw) > max_bytes:
             raise ValueError("file too large")
-        data = json.loads(raw.decode("utf-8"))
+        data = json.loads(raw.decode("utf-8")) if path.endswith(".json") else raw.decode("utf-8")
         if cache_file is not None:
             cache_dir.mkdir(parents=True, exist_ok=True)  # type: ignore[union-attr]
-            cache_file.write_text(json.dumps(data), encoding="utf-8")
+            cache_file.write_text(json.dumps({"v": data}), encoding="utf-8")
         return data
     return fetch
+
+
+def doc_from_file(ext: str, raw: bytes) -> tuple[Optional[object], Optional[str]]:
+    """Turn the bytes of plots/<user>.<ext> into a plot document (or an error message)."""
+    try:
+        text = raw.decode("utf-8")
+    except UnicodeDecodeError:
+        return None, "File is not valid UTF-8 text."
+    if ext == "json":
+        try:
+            return json.loads(text), None
+        except ValueError as exc:
+            return None, f"Not valid JSON: {str(exc)[:100]}"
+    return {"version": 1, "format": ext, "source": text}, None

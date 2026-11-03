@@ -1,0 +1,14 @@
+name: Bug report
+description: Something is broken in the world, editor, validator or workflows
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes: { label: What happened?, description: Include what you expected instead. }
+    validations: { required: true }
+  - type: input
+    id: where
+    attributes: { label: Where?, placeholder: "Viewer / Build editor / Code panel / PR check / Deploy" }
+  - type: textarea
+    id: env
+    attributes: { label: Browser, OS, and a console error if there is one }

@@ -28,11 +28,13 @@ export function uploadPageUrl(repo, branch) { return `https://github.com/${repo}
  * @param {{token:string, upstream:string, branch:string, login?:string, doc:object, ownRepo:boolean, log:(m:string)=>void}} o
  * @returns {Promise<{url:string, login:string}>}
  */
-export async function submitPlot({ token, upstream, branch, doc, ownRepo, log }) {
+export async function submitPlot({ token, upstream, branch, doc, code, ownRepo, log }) {
   const me = await gh(token, 'GET', '/user').catch((e) => { throw new Error(e.status === 401 ? 'GitHub rejected that token.' : e.message); });
   const login = me.login;
   const [upOwner, upName] = upstream.split('/');
-  let fileDoc = doc;
+  // What we commit: a pointer or JSON for block builds, or the raw .css/.xml text for code builds.
+  let fileText = code ? code.source : JSON.stringify(doc);
+  let ext = code ? code.format : 'json';
 
   if (ownRepo) {
     log('Saving your build to your own repository…');
@@ -40,11 +42,13 @@ export async function submitPlot({ token, upstream, branch, doc, ownRepo, log })
     if (!(await tryGh(token, 'GET', `/repos/${login}/${repoName}`))) {
       await gh(token, 'POST', '/user/repos', { name: repoName, description: 'My PullCraft builds', auto_init: true, private: false });
     }
-    const existing = await tryGh(token, 'GET', `/repos/${login}/${repoName}/contents/plot.json`);
-    const put = await gh(token, 'PUT', `/repos/${login}/${repoName}/contents/plot.json`, {
-      message: `Update build: ${doc.title || 'Untitled'}`, content: b64(JSON.stringify(doc)), ...(existing ? { sha: existing.sha } : {}),
+    const own = `plot.${ext}`;
+    const existing = await tryGh(token, 'GET', `/repos/${login}/${repoName}/contents/${own}`);
+    const put = await gh(token, 'PUT', `/repos/${login}/${repoName}/contents/${own}`, {
+      message: `Update build: ${doc.title || 'Untitled'}`, content: b64(fileText), ...(existing ? { sha: existing.sha } : {}),
     });
-    fileDoc = { version: 1, title: doc.title || '', description: doc.description || '', source: { repo: `${login}/${repoName}`, path: 'plot.json', sha: put.commit.sha } };
+    fileText = JSON.stringify({ version: 1, title: doc.title || '', description: doc.description || '', source: { repo: `${login}/${repoName}`, path: own, sha: put.commit.sha } });
+    ext = 'json';
   }
 
   const direct = login.toLowerCase() === upOwner.toLowerCase();
@@ -63,16 +67,21 @@ export async function submitPlot({ token, upstream, branch, doc, ownRepo, log })
   headRef = direct ? name : `${login}:${name}`;
 
   log('Committing your plot…');
-  const path = `plots/${login}.json`;
+  const path = `plots/${login}.${ext}`;
   const current = await tryGh(token, 'GET', `/repos/${upstream}/contents/${path}?ref=${branch}`);
   await gh(token, 'PUT', `/repos/${headRepo}/contents/${path}`, {
-    message: `Update plot: ${login}`, content: b64(JSON.stringify(fileDoc)), branch: name, ...(current ? { sha: current.sha } : {}),
+    message: `Update plot: ${login}`, content: b64(fileText), branch: name, ...(current ? { sha: current.sha } : {}),
   });
+  // A player has exactly one plot file. If they switch format, remove the old one in the same PR.
+  for (const other of ['json', 'css', 'xml'].filter((e) => e !== ext)) {
+    const old = await tryGh(token, 'GET', `/repos/${upstream}/contents/plots/${login}.${other}?ref=${branch}`);
+    if (old) await gh(token, 'DELETE', `/repos/${headRepo}/contents/plots/${login}.${other}`, { message: `Switch plot format to ${ext}`, sha: old.sha, branch: name });
+  }
 
   log('Opening the pull request…');
   const pr = await gh(token, 'POST', `/repos/${upstream}/pulls`, {
     title: `Plot: ${doc.title || login}`, head: headRef, base: branch, maintainer_can_modify: false,
-    body: `Build submitted from the PullCraft editor.\n\n- Blocks: ${doc.blocks?.length ?? 'linked'}\n- Stored in: ${ownRepo ? 'my own repository (pinned commit)' : 'this pull request'}`,
+    body: `Build submitted from the PullCraft editor.\n\n- Blocks: ${doc.blocks?.length ?? 'linked'}\n- Format: ${code ? code.format.toUpperCase() + ' blueprint' : 'blocks'}\n- Stored in: ${ownRepo ? 'my own repository (pinned commit)' : 'this pull request'}`,
   });
   return { url: pr.html_url, login };
 }

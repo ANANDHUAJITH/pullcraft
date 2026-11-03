@@ -21,6 +21,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import pullcraft as pc  # noqa: E402
 
 PR_RE = re.compile(r"\(#(\d+)\)")
+PLOT_PATH_RE = re.compile(r"^plots/([^/]+)\.(json|css|xml)$")
 
 
 def compact(obj) -> str:
@@ -43,9 +44,10 @@ def git_log(root: Path) -> list[dict]:
         pr = PR_RE.search(subject)
         for line in rest:
             parts = line.split("\t")
-            if len(parts) >= 2 and parts[-1].startswith("plots/") and parts[-1].endswith(".json"):
+            pm = PLOT_PATH_RE.match(parts[-1]) if len(parts) >= 2 else None
+            if pm:
                 events.append({
-                    "user": Path(parts[-1]).stem, "status": parts[0][0], "sha": sha, "ts": int(ts),
+                    "user": pm.group(1), "status": parts[0][0], "sha": sha, "ts": int(ts),
                     "author": author, "subject": subject[:100], "pr": int(pr.group(1)) if pr else None,
                 })
     return events  # newest first
@@ -99,23 +101,27 @@ def build(root: Path, out: Path, fetch=None, events=None, repo: str = "", branch
     # ---- collect + validate plots
     plots = []
     skipped = []
-    for path in sorted((root / "plots").glob("*.json")):
+    seen_users: set[str] = set()
+    for path in sorted(p for p in (root / "plots").iterdir() if p.suffix[1:] in pc.PLOT_EXTS):
         user = path.stem
         if not pc.LOGIN_RE.match(user):
             skipped.append((user, "invalid file name"))
             continue
+        if user.lower() in seen_users:
+            skipped.append((user, f"second plot file ({path.name}); keep exactly one"))
+            continue
         if path.stat().st_size > rules["max_file_bytes"]:
             skipped.append((user, "file too large"))
             continue
-        try:
-            doc = json.loads(path.read_text(encoding="utf-8"))
-        except ValueError as exc:
-            skipped.append((user, f"bad JSON: {exc}"))
+        doc, problem = pc.doc_from_file(path.suffix[1:], path.read_bytes())
+        if problem:
+            skipped.append((user, problem))
             continue
         errors, stats, resolved = pc.validate_document(doc, user, cfg, placeable, fetch)
         if errors or resolved is None:
             skipped.append((user, errors[0] if errors else "invalid"))
             continue
+        seen_users.add(user.lower())
         plots.append({"user": user, "stats": stats, "doc": resolved})
 
     # ---- stable slot allocation: order of first merge, then name. Slot 1 = spawn plaza.
@@ -157,6 +163,7 @@ def build(root: Path, out: Path, fetch=None, events=None, repo: str = "", branch
         plot_meta.append({
             "user": p["user"], "cell": list(cell), "origin": [ox, oz], "title": p["stats"].title,
             "description": p["stats"].description, "blocks": p["stats"].blocks, "source": p["stats"].kind,
+            "format": p["doc"].get("format", "blocks"),
             "added": first.get(p["user"].lower()), "updated": commits[0]["ts"] if commits else None,
             "pr": commits[0]["pr"] if commits else None,
         })
@@ -170,6 +177,8 @@ def build(root: Path, out: Path, fetch=None, events=None, repo: str = "", branch
     for sub in ("chunks", "players", "plots", "metadata"):
         (wdir / sub).mkdir(parents=True)
     (out / ".nojekyll").write_text("")
+    if (root / "examples").is_dir():
+        shutil.copytree(root / "examples", out / "examples")
     shutil.copy(root / "data" / "blocks.json", wdir / "blocks.json")
 
     chunk_hashes = {}
@@ -191,6 +200,7 @@ def build(root: Path, out: Path, fetch=None, events=None, repo: str = "", branch
         }), encoding="utf-8")
         (wdir / "plots" / f"{p['user']}.json").write_text(compact({
             "version": 1, "title": m["title"], "description": m["description"], "blocks": p["doc"]["blocks"],
+            **({"format": p["doc"]["format"], "source": p["doc"]["source"]} if "format" in p["doc"] else {}),
         }), encoding="utf-8")
 
     recent = [e for e in events if e["user"].lower() in seen_lower][: cfg["recent_limit"]]

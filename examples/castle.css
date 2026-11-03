@@ -1,0 +1,20 @@
+/* Hilltop Castle: four towers, a curtain wall, a gatehouse and a keep. */
+:root {
+  --title: Hilltop Castle;
+  --description: Four towers and a keep. Written in CSS.;
+  --wall: stone_bricks;
+  --trim: smooth_stone;
+  --roof: dark_oak_planks;
+  --lamp: glowstone;
+}
+.courtyard { shape: box; x: 2; y: 0; z: 2; width: 28; height: 1; depth: 28; block: cobblestone; }
+.curtain-wall { shape: walls; x: 4; y: 1; z: 4; width: 24; height: 7; depth: 24; block: var(--wall); }
+.battlements { shape: box; x: 4; y: 8; z: 4; width: 1; height: 1; depth: 1; block: var(--trim); repeat-x: 12; gap-x: 1; }
+.battlements-back { shape: box; x: 4; y: 8; z: 27; width: 1; height: 1; depth: 1; block: var(--trim); repeat-x: 12; gap-x: 1; }
+.gate { shape: box; x: 14; y: 1; z: 4; width: 4; height: 5; depth: 1; block: air; }
+.tower { shape: cylinder; x: 2; y: 1; z: 2; width: 7; height: 12; depth: 7; block: var(--wall); repeat-x: 2; gap-x: 15; repeat-z: 2; gap-z: 15; }
+.tower-roof { shape: pyramid; x: 2; y: 13; z: 2; width: 7; height: 4; depth: 7; block: var(--roof); repeat-x: 2; gap-x: 15; repeat-z: 2; gap-z: 15; }
+.keep { shape: shell; x: 11; y: 1; z: 11; width: 10; height: 14; depth: 10; block: var(--wall); }
+.keep-roof { shape: pyramid; x: 10; y: 15; z: 10; width: 12; height: 6; depth: 12; block: var(--roof); }
+.windows { shape: box; x: 12; y: 5; z: 11; width: 1; height: 2; depth: 1; block: glass; repeat-x: 4; gap-x: 1; }
+.torches { shape: box; x: 13; y: 6; z: 3; width: 1; height: 1; depth: 1; block: var(--lamp); repeat-x: 2; gap-x: 4; }

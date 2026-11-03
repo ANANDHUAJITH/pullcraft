@@ -1,0 +1,13 @@
+name: Feature or new block
+description: Suggest a shape, block, tool or improvement
+labels: [enhancement]
+body:
+  - type: textarea
+    id: idea
+    attributes: { label: What should PullCraft do?, description: Who is it for and what would they build with it? }
+    validations: { required: true }
+  - type: dropdown
+    id: help
+    attributes:
+      label: Would you like to build it?
+      options: ["Yes, I'll open a PR", "Yes, with guidance", "No, just an idea"]

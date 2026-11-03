@@ -110,10 +110,103 @@ class PullRequestRules(unittest.TestCase):
         self.assertEqual(self.ev(created=now, assoc="OWNER").kind, "approved")
 
     def test_case_clash(self):
-        self.assertEqual(self.ev(existing={"Alice"}, login="alice").kind, "rejected")
+        self.assertEqual(self.ev(existing={"plots/Alice.json"}, login="alice").kind, "rejected")
+
+    def test_css_and_xml_files(self):
+        css = b":root{--title: Hut;} .a{shape:box; width:3; height:3; depth:3; block:stone;}"
+        for ext, raw in (("css", css), ("xml", b'<plot title="x"><box w="2" h="2" d="2" block="stone"/></plot>')):
+            files = [{"filename": f"plots/alice.{ext}", "status": "added"}]
+            v = vp.evaluate("alice", "NONE", files, lambda p: raw, set(), self.OLD, CFG, PLACEABLE)
+            self.assertEqual(v.kind, "approved", v.errors)
+
+    def test_bad_blueprint_rejected(self):
+        files = [{"filename": "plots/alice.css", "status": "added"}]
+        v = vp.evaluate("alice", "NONE", files, lambda p: b".a{block:nope;}", set(), self.OLD, CFG, PLACEABLE)
+        self.assertEqual(v.kind, "rejected")
+
+    def test_format_switch_and_double_files(self):
+        raw = b".a{shape:box; block:stone;}"
+        switch = [{"filename": "plots/alice.json", "status": "removed"}, {"filename": "plots/alice.css", "status": "added"}]
+        v = vp.evaluate("alice", "NONE", switch, lambda p: raw, {"plots/alice.json"}, self.OLD, CFG, PLACEABLE)
+        self.assertEqual(v.kind, "approved", v.errors)
+        rename = [{"filename": "plots/alice.css", "status": "renamed", "previous_filename": "plots/alice.json"}]
+        v = vp.evaluate("alice", "NONE", rename, lambda p: raw, {"plots/alice.json"}, self.OLD, CFG, PLACEABLE)
+        self.assertEqual(v.kind, "approved", v.errors)
+        both = [{"filename": "plots/alice.css", "status": "added"}]
+        v = vp.evaluate("alice", "NONE", both, lambda p: raw, {"plots/alice.json"}, self.OLD, CFG, PLACEABLE)
+        self.assertEqual(v.kind, "rejected")
+        only_delete = [{"filename": "plots/alice.json", "status": "removed"}]
+        v = vp.evaluate("alice", "NONE", only_delete, lambda p: raw, {"plots/alice.json"}, self.OLD, CFG, PLACEABLE)
+        self.assertEqual(v.kind, "rejected")
 
     def test_invalid_content(self):
         self.assertEqual(self.ev(body=doc([[40, 0, 0, "stone"]])).kind, "rejected")
+
+
+import blueprint as bp  # noqa: E402
+
+
+class Blueprints(unittest.TestCase):
+    def comp(self, fmt, src):
+        return bp.compile_blueprint(fmt, src, CFG, PLACEABLE)
+
+    def test_examples_compile(self):
+        for f in sorted((ROOT / "examples").iterdir()):
+            errors, meta, blocks = self.comp(f.suffix[1:], f.read_text())
+            self.assertEqual(errors, [], f.name)
+            self.assertTrue(meta["title"] and blocks, f.name)
+
+    def test_css_semantics(self):
+        e, _, b = self.comp("css", ".a{shape:box;x:1;y:2;z:3;width:2;height:1;depth:1;block:stone} .b{x:1;y:2;z:3;block:air}")
+        self.assertEqual((e, b), ([], [[2, 2, 3, "stone"]]))  # later rule carves
+        e, _, b = self.comp("css", ":root{--m:glass} .a{block:var(--m);w:2;repeat:3;gap:1}")
+        self.assertEqual([x[0] for x in b], [0, 1, 3, 4, 6, 7])
+        _, _, b = self.comp("css", ".a{shape:box;x:30;width:10;block:stone}")
+        self.assertEqual(len(b), 2)  # clipped to the plot
+
+    def test_shapes(self):
+        n = lambda shape, w, h, d: len(self.comp("css", f".a{{shape:{shape};w:{w};h:{h};d:{d};block:stone}}")[2])  # noqa: E731
+        self.assertEqual(n("box", 3, 3, 3), 27)
+        self.assertEqual(n("shell", 3, 3, 3), 26)
+        self.assertEqual(n("walls", 3, 2, 3), 16)
+        self.assertEqual(n("pyramid", 3, 2, 3), 9 + 1)
+        self.assertEqual(n("cylinder", 1, 1, 1), 1)
+        self.assertTrue(0 < n("sphere", 9, 9, 9) < 729 and 0 < n("dome", 9, 5, 9) < 405)
+
+    def test_errors_are_specific(self):
+        for fmt, src, needle in [
+            ("css", ".a{block:nope}", "unknown or non-placeable"), ("css", ".a{block:stone;colour:red}", "unknown property"),
+            ("css", ".a{block:stone;width:abc}", "whole number"), ("css", ".a{block:stone;width:9999}", "between"),
+            ("css", ".a{block:var(--x)}", "undefined variable"), ("css", "@media x{.a{block:stone}}", "nested"),
+            ("css", ".a{block:stone", "missing"), ("css", "/* open", "Unterminated"), ("css", ".a{shape:cube;block:stone}", "shape must"),
+            ("css", ".a{block:water}", "non-placeable"), ("css", "", "empty"), ("css", ":root{--a:b}", "no shapes"),
+            ("xml", "<plot><box block='stone'", "XML error"), ("xml", "<scene/>", "root element"),
+            ("xml", "<plot><box block='$q'/></plot>", "undefined variable"), ("xml", "<plot><wat/></plot>", "unknown element"),
+            ("xml", '<!DOCTYPE x [<!ENTITY a "b">]><plot/>', "DOCTYPE"), ("xml", "<plot><box/></plot>", "missing 'block'"),
+            ("css", ".a{block:stone;width:256;height:64;depth:256;repeat-x:1000}", "too many|Too many|too complex|complex"),
+        ]:
+            errors = self.comp(fmt, src)[0]
+            self.assertTrue(errors, src)
+            import re as _re
+            self.assertTrue(any(_re.search(needle, e, _re.I) for e in errors), (src, errors))
+
+    def test_limits(self):
+        errs = self.comp("css", ".a{block:stone}" * 5000)[0]
+        self.assertTrue(errs)  # too long
+        big = ".a{block:stone}" * 2100
+        self.assertTrue(any("Too many shapes" in e for e in self.comp("css", big)[0]))
+        t = self.comp("xml", "<plot>" + "<group>" * 7 + "<box block='stone'/>" + "</group>" * 7 + "</plot>")[0]
+        self.assertTrue(any("nested too deeply" in e for e in t))
+
+    def test_document_formats(self):
+        d = {"version": 1, "format": "css", "source": ".a{block:stone;w:2;h:2;d:2}", "title": "Cube"}
+        errs, stats, res = pc.validate_document(d, "alice", CFG, PLACEABLE)
+        self.assertEqual((errs, stats.blocks, stats.format, stats.title), ([], 8, "css", "Cube"))
+        self.assertEqual(res["format"], "css")
+        self.assertTrue(pc.validate_document({**d, "extra": 1}, "alice", CFG, PLACEABLE)[0])
+        ptr = {"version": 1, "source": {"repo": "alice/b", "path": "plot.css", "sha": "a" * 40}}
+        errs, stats, res = pc.validate_document(ptr, "alice", CFG, PLACEABLE, lambda *a: ".a{block:stone}")
+        self.assertEqual((errs, stats.kind, stats.format), ([], "repo", "css"))
 
 
 class Builder(unittest.TestCase):
@@ -155,6 +248,22 @@ class Builder(unittest.TestCase):
         self.assertEqual([h["pr"] for h in p["history"]], [2])  # history comes from the git events
         self.assertTrue((out / "world" / "plots" / "amy.json").exists())
         self.assertGreaterEqual((2 * m["city_ring"] + 1) ** 2 - 1 - 2, CFG["rules"]["min_free_plots"])
+
+    def test_code_plots_in_world(self):
+        root = self.make_root({"amy": doc([[0, 0, 0, "stone"]])})
+        (root / "plots" / "bob.css").write_text(":root{--title: Bob Box} .a{block:gold_block;w:2;h:2;d:2}")
+        (root / "plots" / "cy.xml").write_text("<plot title='Cy'><box block='glass' w='3' h='1' d='3'/></plot>")
+        (root / "plots" / "amy.css").write_text(".a{block:stone}")  # second file for amy: only one is used
+        (root / "examples").mkdir()
+        (root / "examples" / "x.css").write_text(".a{block:stone}")
+        out = root / "site"
+        m = bw.build(root, out, fetch=lambda *a: None, events=[], repo="o/r")
+        fmt = {p["user"]: p["format"] for p in m["plots"]}
+        self.assertEqual(fmt, {"amy": "css", "bob": "css", "cy": "xml"})  # alphabetical: amy.css wins over amy.json
+        bob = json.loads((out / "world" / "plots" / "bob.json").read_text())
+        self.assertEqual((bob["format"], len(bob["blocks"])), ("css", 8))
+        self.assertIn("gold_block", bob["source"])
+        self.assertTrue((out / "examples" / "x.css").exists())
 
     def test_deterministic_and_negative_chunks(self):
         plots = {"amy": doc([[0, 0, 0, "stone"]])}

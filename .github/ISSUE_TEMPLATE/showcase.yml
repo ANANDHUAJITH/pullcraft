@@ -1,0 +1,11 @@
+name: Showcase request
+description: Want your build featured? Tell us about it
+labels: [showcase]
+body:
+  - type: input
+    id: user
+    attributes: { label: Your GitHub username (your plot is plots/<username>.*) }
+    validations: { required: true }
+  - type: textarea
+    id: story
+    attributes: { label: What is it and how did you make it?, description: Blocks, CSS, XML, AI-assisted? Share the prompt if you like. }
